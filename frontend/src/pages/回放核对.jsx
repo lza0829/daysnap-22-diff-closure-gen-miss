@@ -8,6 +8,7 @@ export default function 回放核对() {
   const [讯, set讯] = useState("");
   const [处置图, set处置图] = useState({});
   const [忙, set忙] = useState("");
+  const [票, set票] = useState("");
 
   const 刷新 = async () => {
     const 列表 = await api.回放批次();
@@ -27,11 +28,11 @@ export default function 回放核对() {
 
   const 跑 = () =>
     api
-      .回放(日)
+      .回放({ 营业日: 日, 重开票: 票 || undefined })
       .then((r) =>
         set讯(
           `批次 ${r.批次编号} 通过=${r.通过} 相符=${r.相符} 差额=${r.差额} 工单=${r.工单数} ` +
-            `改镜=${r.是否改镜}（口径：${r.处置口径}——回放不改镜，差额落纠偏工单）`
+            `消化闭包=${r.已闭合 ?? 0} 重开=${r.重开数 ?? 0} 改镜=${r.是否改镜}（架构：${r.闭包架构 || "乙"}；回放不改镜）`
         )
       )
       .then(刷新)
@@ -53,11 +54,18 @@ export default function 回放核对() {
     <div>
       <h1 className="题">回放核对</h1>
       <p className="述">
-        前日快照加当日流水重算对照当日镜。检出差额即与差额行同票落
-        <b>纠偏工单</b>，回放事务<b>不改镜</b>（是否改镜恒为否）；与同日抽取盖写互斥，交错即失败闭。
+        前日快照加当日流水重算对照当日镜。检出差额即同票落<b>纠偏工单</b>；处置成功同票写
+        <b>闭包世代</b>，二次回放默认报“已闭合”而不新增开放差额。持
+        <Link to="/差额闭包">重开票</Link>才允许原键重现。回放事务<b>不改镜</b>，与同日抽取互斥。
       </p>
       <div className="行">
-        <input value={日} onChange={(e) => set日(e.target.value)} />
+        <input value={日} onChange={(e) => set日(e.target.value)} placeholder="营业日" />
+        <input
+          value={票}
+          onChange={(e) => set票(e.target.value)}
+          placeholder="重开票号（无可空）"
+          style={{ minWidth: 220 }}
+        />
         <button className="水" onClick={跑}>
           执行回放
         </button>

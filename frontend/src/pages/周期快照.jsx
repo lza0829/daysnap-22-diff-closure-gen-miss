@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api.js";
 
 export default function 周期快照() {
@@ -32,6 +33,7 @@ export default function 周期快照() {
               <th>余额</th>
               <th>抽取批次</th>
               <th>来源</th>
+              <th>闭包世代</th>
             </tr>
           </thead>
           <tbody>
@@ -42,6 +44,15 @@ export default function 周期快照() {
                 <td>{r.余额}</td>
                 <td>{r.抽取批次编号}</td>
                 <td>{r.来源}</td>
+                <td>
+                  {r.闭包世代号 ? (
+                    <Link to="/差额闭包" title={r.闭包状态}>
+                      {String(r.闭包世代号).slice(0, 14)}…（{r.闭包状态}）
+                    </Link>
+                  ) : (
+                    "未闭包"
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

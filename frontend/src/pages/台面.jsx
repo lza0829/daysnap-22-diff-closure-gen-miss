@@ -48,12 +48,14 @@ export default function 台面() {
         <div className="阶"><div className="序">账户</div><b>{o.账户数 ?? "—"}</b><span>册内户数</span></div>
         <div className="阶"><div className="序">流水</div><b>{o.流水数 ?? "—"}</b><span>已入账</span></div>
         <div className="阶"><div className="序">快照</div><b>{o.快照数 ?? "—"}</b><span>有效行</span></div>
-        <div className="阶"><div className="序">差额</div><b>{o.差额行数 ?? "—"}</b><span>清单行</span></div>
+        <div className="阶"><div className="序">差额</div><b>{o.开放差额数 ?? o.差额行数 ?? "—"}</b><span>开放清单行</span></div>
+        <div className="阶"><div className="序">闭包</div><b>{o.闭包世代数 ?? "—"}</b><span>闭包世代</span></div>
         <div className="阶"><div className="序">旁置</div><b>{o.旁置数 ?? "—"}</b><span>未入账</span></div>
       </div>
       <div className="行">
         <button disabled={忙} onClick={冒烟}>{忙 ? "跑着…" : "一键冒烟"}</button>
         <button className="次" onClick={() => 刷新().catch((e) => set讯(String(e.message || e)))}>刷新总览</button>
+        <Link className="次" to="/差额闭包">按世代打开闭包核证 →</Link>
         <button
           className="次"
           onClick={() =>

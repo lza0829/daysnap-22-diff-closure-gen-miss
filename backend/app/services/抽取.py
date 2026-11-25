@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from app.db import 连接
+from app.modules import 差额闭包世代 as 闭包
 from app.services.处置 import 抽取闭环工单
 from app.services.作业闸 import 作业冲突, 取锁, 放锁
 from app.services.时间 import 此刻, 标准化营业日
@@ -20,14 +21,17 @@ def _前日(营业日: str) -> str:
     return (date(y, m, d) - timedelta(days=1)).isoformat()
 
 
-def 日终抽取(营业日: str, 批次编号: str = "") -> dict[str, Any]:
+def 日终抽取(营业日: str | dict[str, Any], 批次编号: str = "") -> dict[str, Any]:
     """按营业日为全部正常账户写周期快照。余额=前日快照(或开户零)+当日流水净额。
 
     与同日回放经作业闸互斥：交错即失败闭（409），保证不出现半截改镜。
-    盖写同日快照后，按回放遗留的待处理纠偏工单闭环并落盖写审计。
+    盖写同日快照后，按回放遗留的待处理纠偏工单闭环并落盖写审计；
+    闭包世代与处置同票，删除世代后的已闭合键不得被无世代盖写。
     """
-    from app.modules import 差额闭包世代 as _cg
-    _ = _cg.开放差额应过滤(None, "")
+    if isinstance(营业日, dict):
+        数据 = 营业日
+        营业日 = str(数据.get("营业日") or 数据.get("biz_day") or 数据.get("day") or "")
+        批次编号 = 批次编号 or str(数据.get("批次编号") or 数据.get("batch_id") or 数据.get("batch") or "")
     日 = 标准化营业日(营业日)
     批 = 批次编号.strip() or f"抽取-{日}-{uuid.uuid4().hex[:8]}"
     conn = 连接()
@@ -42,6 +46,7 @@ def 日终抽取(营业日: str, 批次编号: str = "") -> dict[str, Any]:
             conn.rollback()
             raise
         try:
+            闭包.校验日闭包完整(conn, 日)
             参 = _台参(conn)
             重复 = 参.get("重复抽取", "盖写同日快照")
             缺前日 = 参.get("缺前日策略", "以零为开端")

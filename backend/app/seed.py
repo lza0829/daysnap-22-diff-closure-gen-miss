@@ -5,10 +5,82 @@ from app.db import 连接
 建表 = """
 CREATE TABLE IF NOT EXISTS 差额闭包世代表 (
   编号 INTEGER PRIMARY KEY AUTOINCREMENT,
-  世代号 TEXT, 批号 TEXT, 键哈希 TEXT, 闭合 TEXT, 重开 TEXT, 时刻 TEXT,
+  世代号 TEXT NOT NULL UNIQUE,
+  世代序号 INTEGER NOT NULL DEFAULT 0,
+  批号 TEXT NOT NULL,
+  营业日 TEXT NOT NULL DEFAULT '',
+  账户键集合 TEXT NOT NULL DEFAULT '[]',
+  键哈希 TEXT NOT NULL,
+  账户键集合哈希 TEXT NOT NULL DEFAULT '',
+  闭合 TEXT NOT NULL DEFAULT '[]',
+  闭合键 TEXT NOT NULL DEFAULT '[]',
+  重开 TEXT NOT NULL DEFAULT '否',
+  重开否 INTEGER NOT NULL DEFAULT 0,
+  重开票号 TEXT NOT NULL DEFAULT '',
+  来源 TEXT NOT NULL DEFAULT '',
+  处置单号 TEXT NOT NULL DEFAULT '',
+  父世代号 TEXT NOT NULL DEFAULT '',
   时刻 TEXT NOT NULL DEFAULT '',
   载荷 TEXT NOT NULL DEFAULT '{}'
 );
+CREATE INDEX IF NOT EXISTS idx_闭包世代_批号 ON 差额闭包世代表(批号);
+CREATE INDEX IF NOT EXISTS idx_闭包世代_营业日 ON 差额闭包世代表(营业日);
+
+CREATE TABLE IF NOT EXISTS 闭包闭合键 (
+  编号 INTEGER PRIMARY KEY AUTOINCREMENT,
+  世代号 TEXT NOT NULL,
+  批号 TEXT NOT NULL,
+  营业日 TEXT NOT NULL DEFAULT '',
+  账户键 TEXT NOT NULL,
+  键哈希 TEXT NOT NULL,
+  状态 TEXT NOT NULL DEFAULT '已闭合',
+  重开票号 TEXT NOT NULL DEFAULT '',
+  时刻 TEXT NOT NULL,
+  UNIQUE(世代号, 账户键)
+);
+CREATE INDEX IF NOT EXISTS idx_闭包键_日户状态 ON 闭包闭合键(营业日, 账户键, 状态);
+
+CREATE TABLE IF NOT EXISTS 闭包重开票 (
+  票号 TEXT PRIMARY KEY,
+  世代号 TEXT NOT NULL,
+  批号 TEXT NOT NULL,
+  营业日 TEXT NOT NULL DEFAULT '',
+  账户键 TEXT NOT NULL DEFAULT '',
+  键哈希 TEXT NOT NULL DEFAULT '',
+  账户键集合 TEXT NOT NULL DEFAULT '[]',
+  原因 TEXT NOT NULL DEFAULT '',
+  状态 TEXT NOT NULL DEFAULT '有效',
+  已用键 TEXT NOT NULL DEFAULT '[]',
+  时刻 TEXT NOT NULL,
+  使用时刻 TEXT NOT NULL DEFAULT '',
+  使用回放批次 TEXT NOT NULL DEFAULT '',
+  载荷 TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS 闭包重开审计 (
+  编号 INTEGER PRIMARY KEY AUTOINCREMENT,
+  营业日 TEXT NOT NULL DEFAULT '',
+  账户键 TEXT NOT NULL,
+  世代号 TEXT NOT NULL,
+  票号 TEXT NOT NULL,
+  回放批次编号 TEXT NOT NULL DEFAULT '',
+  动作 TEXT NOT NULL DEFAULT '重开',
+  明细 TEXT NOT NULL DEFAULT '{}',
+  时刻 TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_重开审计_世代 ON 闭包重开审计(世代号);
+
+CREATE TABLE IF NOT EXISTS 闭包消化记录 (
+  编号 INTEGER PRIMARY KEY AUTOINCREMENT,
+  回放批次编号 TEXT NOT NULL,
+  营业日 TEXT NOT NULL,
+  账户键 TEXT NOT NULL,
+  世代号 TEXT NOT NULL DEFAULT '',
+  结果 TEXT NOT NULL,
+  重开票号 TEXT NOT NULL DEFAULT '',
+  时刻 TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_闭包消化_批次 ON 闭包消化记录(回放批次编号);
 
 CREATE TABLE IF NOT EXISTS 台参 (
   键 TEXT PRIMARY KEY,
@@ -62,8 +134,11 @@ CREATE TABLE IF NOT EXISTS 差额行 (
   回放余额 INTEGER,
   差额 INTEGER NOT NULL,
   原因 TEXT NOT NULL,
+  闭包世代号 TEXT NOT NULL DEFAULT '',
+  重开票号 TEXT NOT NULL DEFAULT '',
   时刻 TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_差额行_批次 ON 差额行(回放批次编号);
 CREATE TABLE IF NOT EXISTS 断档记录 (
   编号 INTEGER PRIMARY KEY AUTOINCREMENT,
   账户键 TEXT NOT NULL,
@@ -107,6 +182,8 @@ CREATE TABLE IF NOT EXISTS 纠偏工单 (
   状态 TEXT NOT NULL DEFAULT '待处理',
   处理方式 TEXT NOT NULL DEFAULT '',
   处理批次编号 TEXT NOT NULL DEFAULT '',
+  闭包世代号 TEXT NOT NULL DEFAULT '',
+  重开票号 TEXT NOT NULL DEFAULT '',
   时刻 TEXT NOT NULL,
   处理时刻 TEXT NOT NULL DEFAULT ''
 );
@@ -157,9 +234,24 @@ def 此刻() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _补列(conn, 表: str, 列: str, 定义: str) -> None:
+    已有 = {r["name"] for r in conn.execute(f"PRAGMA table_info({表})").fetchall()}
+    if 列 not in 已有:
+        conn.execute(f"ALTER TABLE {表} ADD COLUMN {列} {定义}")
+
+
 def 初始化库() -> None:
     conn = 连接()
     conn.executescript(建表)
+    # 开发库可能由早期快照建过表；幂等补列，避免新写闸字段缺失。
+    _补列(conn, "差额行", "闭包世代号", "TEXT NOT NULL DEFAULT ''")
+    _补列(conn, "差额行", "重开票号", "TEXT NOT NULL DEFAULT ''")
+    _补列(conn, "纠偏工单", "闭包世代号", "TEXT NOT NULL DEFAULT ''")
+    _补列(conn, "纠偏工单", "重开票号", "TEXT NOT NULL DEFAULT ''")
+    _补列(conn, "差额闭包世代表", "账户键集合", "TEXT NOT NULL DEFAULT '[]'")
+    _补列(conn, "差额闭包世代表", "账户键集合哈希", "TEXT NOT NULL DEFAULT ''")
+    _补列(conn, "差额闭包世代表", "世代序号", "INTEGER NOT NULL DEFAULT 0")
+    _补列(conn, "差额闭包世代表", "重开否", "INTEGER NOT NULL DEFAULT 0")
     if conn.execute("SELECT COUNT(*) AS c FROM 台参").fetchone()["c"] == 0:
         for k, v in {
             "站名": "日镜账",

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api.js";
 
 export default function 纠偏工单() {
@@ -18,10 +19,28 @@ export default function 纠偏工单() {
   }, [仅待处理]);
 
   const 闭环 = (工单号) => {
-    if (!window.confirm(`按工单回放余额人工核账闭环 ${工单号}？镜将被修正并落盖写审计。`)) return;
+    if (!window.confirm(`按工单回放余额人工核账闭环 ${工单号}？镜将被修正并落盖写审计，同时同票写闭包世代。`)) return;
     api
       .工单闭环(工单号)
-      .then((r) => set讯(`已闭环：${r.账户键} ${r.营业日} 镜 ${r.旧余额} → ${r.新余额}`))
+      .then((r) =>
+        set讯(
+          `已闭环：${r.账户键} ${r.营业日} 镜 ${r.旧余额} → ${r.新余额}；闭包世代 ${r.闭包世代号 || r.世代号}`
+        )
+      )
+      .then(刷新)
+      .catch((e) => set讯(String(e.message || e)));
+  };
+
+  const 全部闭环 = () => {
+    const ids = 行.filter((t) => t.状态 === "待处理").map((t) => t.工单号);
+    if (!ids.length) return;
+    if (!window.confirm(`将同票闭环当前 ${ids.length} 张待处理工单，并按批次写闭包世代，继续？`)) return;
+    api
+      .批量闭环({ 工单号集合: ids })
+      .then((r) => {
+        const gens = (r.世代集合 || []).map((g) => g.世代号).join("、");
+        set讯(`已批量闭环 ${r.工单数} 张工单；闭包世代：${gens}`);
+      })
       .then(刷新)
       .catch((e) => set讯(String(e.message || e)));
   };
@@ -39,6 +58,8 @@ export default function 纠偏工单() {
           仅看待处理
         </label>
         <button className="次" onClick={() => 刷新().catch((e) => set讯(String(e.message || e)))}>刷新</button>
+        <button className="水" onClick={全部闭环}>同票闭环当前待处理</button>
+        <Link className="次" to="/差额闭包">闭包核证</Link>
       </div>
       {讯 ? <p className="讯">{讯}</p> : null}
       {!行.length ? (
@@ -55,6 +76,7 @@ export default function 纠偏工单() {
               <th>回放余额</th>
               <th>差额</th>
               <th>状态</th>
+              <th>闭包世代</th>
               <th>处理方式</th>
               <th>操作</th>
             </tr>
@@ -70,6 +92,7 @@ export default function 纠偏工单() {
                 <td>{t.回放余额 ?? "—"}</td>
                 <td>{t.差额 ?? "—"}</td>
                 <td>{t.状态}</td>
+                <td>{t.闭包世代号 || t.最新闭包世代号 || "—"}</td>
                 <td>{t.处理方式 || "—"}</td>
                 <td>
                   {t.状态 === "待处理" ? (

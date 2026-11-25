@@ -17,6 +17,16 @@ def 总览() -> dict:
             "旁置数": 数("SELECT COUNT(*) FROM 旁置簿"),
             "工单数": 数("SELECT COUNT(*) FROM 纠偏工单"),
             "待处理工单数": 数("SELECT COUNT(*) FROM 纠偏工单 WHERE 状态='待处理'"),
+            "开放差额数": 数(
+                "SELECT COUNT(*) FROM 差额行 d WHERE ("
+                "NOT EXISTS (SELECT 1 FROM 纠偏工单 w WHERE w.回放批次编号=d.回放批次编号 "
+                "AND w.账户键=d.账户键 AND w.营业日=d.营业日) "
+                "OR EXISTS (SELECT 1 FROM 纠偏工单 w WHERE w.回放批次编号=d.回放批次编号 "
+                "AND w.账户键=d.账户键 AND w.营业日=d.营业日 AND w.状态='待处理'))"
+            ),
+            "闭包世代数": 数("SELECT COUNT(*) FROM 差额闭包世代表"),
+            "有效闭包键数": 数("SELECT COUNT(*) FROM 闭包闭合键 WHERE 状态='已闭合'"),
+            "重开票数": 数("SELECT COUNT(*) FROM 闭包重开票"),
             "盖写审计数": 数("SELECT COUNT(*) FROM 盖写审计"),
             "抽取批次数": 数("SELECT COUNT(*) FROM 抽取批次"),
             "回放批次数": 数("SELECT COUNT(*) FROM 回放批次"),
